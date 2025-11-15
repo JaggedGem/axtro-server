@@ -1,0 +1,118 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  password     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Storage quota in bytes
+  storageQuota BigInt   @default(16106127360) 
+  storageUsed  BigInt   @default(0)
+
+  files   File[]
+  folders Folder[]
+  ownedShares    Share[] @relation("ShareOwner")
+  receivedShares Share[] @relation("ShareRecipient")
+
+  @@map("users")
+}
+
+model Folder {
+  id        String   @id @default(cuid())
+  name      String
+  path      String
+  parentId  String?
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent   Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children Folder[] @relation("FolderHierarchy")
+  files    File[]
+  shares   Share[]
+
+  @@unique([userId, path])
+  @@map("folders")
+}
+
+model File {
+  id           String   @id @default(cuid())
+  name         String
+  originalName String
+  mimeType     String
+  size         BigInt
+  path         String
+  storageKey   String   @unique
+  checksum     String
+  folderId     String?
+  userId       String
+  version      Int      @default(1)
+  isDeleted    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder   Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  shares   Share[]
+  versions FileVersion[]
+
+  @@map("files")
+}
+
+model FileVersion {
+  id         String   @id @default(cuid())
+  fileId     String
+  version    Int
+  storageKey String   @unique
+  size       BigInt
+  checksum   String
+  createdAt  DateTime @default(now())
+
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@unique([fileId, version])
+  @@map("file_versions")
+}
+
+model Share {
+  id               String     @id @default(cuid())
+  userId           String
+  fileId           String?
+  folderId         String?
+  sharedWithUserId String?
+  sharedWithEmail  String?
+  shareType        ShareType
+  permission       Permission
+  expiresAt        DateTime?
+  createdAt        DateTime   @default(now())
+
+  user   User    @relation("ShareOwner", fields: [userId], references: [id])
+  sharedWithUser User?   @relation("ShareRecipient", fields: [sharedWithUserId], references: [id])
+  file   File?   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  folder Folder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  @@map("shares")
+}
+
+enum ShareType {
+  PUBLIC
+  PRIVATE
+  PASSWORD_PROTECTED
+}
+
+enum Permission {
+  READ
+  WRITE
+  ADMIN
+}
